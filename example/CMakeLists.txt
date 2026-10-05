@@ -21,6 +21,7 @@ endfunction()
 set(MAGIC_ENUM_EXAMPLES
     example
     enum_flag_example
+    enum_flags_codec_example
     example_containers_array
     example_containers_bitset
     example_containers_set

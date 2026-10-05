@@ -19,6 +19,7 @@
 * [`enum_for_each` calls function for each enum value as constexpr constant.](#enum_for_each)
 * [`enum_next_value` and `enum_prev_value` move through enum values.](#enum_next_value-and-enum_prev_value)
 * [`enum_flags_*` functions operate on flags.](#enum_flags)
+* [`flags_codec` explicit encode/decode plan for flags.](#flags_codec)
 * [`is_flags_enum` checks whether enum uses flag semantics.](#is_flags_enum)
 * [`is_unscoped_enum` identifies unscoped enum types.](#is_unscoped_enum)
 * [`is_scoped_enum` identifies scoped enum types.](#is_scoped_enum)
@@ -673,6 +674,32 @@ constexpr bool enum_flags_test_any(E lhs, E rhs) noexcept;
 
   magic_enum::enum_flags_test_any(Directions::Left | Directions::Down | Directions::Right, Directions::Down | Directions::Right); // -> true
   ```
+
+## `flags_codec`
+
+```cpp
+namespace magic_enum::flags_codec {
+
+enum class unknown_bits : unsigned char { reject, preserve };
+
+template <unknown_bits Policy = unknown_bits::reject, typename E>
+optional<string> encode(E value, char_type sep = '|');
+
+template <unknown_bits Policy = unknown_bits::reject, typename E>
+constexpr optional<E> decode(string_view text, char_type sep = '|');
+
+}
+```
+
+* Defined in header `<magic_enum/magic_enum_flags_codec.hpp>`
+
+* Explicit encode/decode plan for flag enums; additive, does not change `enum_name` or `enum_flags_*`.
+
+* Known combinations map to enumerator names; unnamed bits are either rejected (`unknown_bits::reject`, the default) or preserved as the original integer token (`unknown_bits::preserve`), so a round-trip preserves every bit.
+
+* The zero combination is valid and distinct from "no name"; aliases use the first declared name and never emit the same bit twice; signed underlying types are range-checked first and negative values follow the policy.
+
+* See [doc/flags_codec.md](flags_codec.md) for the full plan and `example/enum_flags_codec_example.cpp` for a four-combination example.
 
 ## `is_flags_enum`
 

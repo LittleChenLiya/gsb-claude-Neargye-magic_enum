@@ -278,6 +278,10 @@ endfunction()
 
 magic_enum_add_tests(cpp17 c++17)
 magic_enum_make_test(test_range.cpp test_range-cpp17 c++17)
+# Explicit enum-flags encode/decode plan (see doc/flags_codec.md).
+# Focused serial acceptance run:
+#   ctest --test-dir <build-dir> -j1 -R '^test_flags_codec-cpp17$' --output-on-failure
+magic_enum_make_test(test_flags_codec.cpp test_flags_codec-cpp17 c++17)
 magic_enum_make_test(test.cpp test-hash-cpp17 c++17)
 target_compile_definitions(test-hash-cpp17 PRIVATE MAGIC_ENUM_ENABLE_HASH=1)
 magic_enum_make_test(test_flags.cpp test_flags-hash-cpp17 c++17)

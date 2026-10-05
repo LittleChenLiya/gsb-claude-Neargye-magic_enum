@@ -23,6 +23,7 @@ module;
 
 #  include <magic_enum/magic_enum.hpp>
 #  include <magic_enum/magic_enum_flags.hpp>
+#  include <magic_enum/magic_enum_flags_codec.hpp>
 #  include <magic_enum/magic_enum_fuse.hpp>
 #  include <magic_enum/magic_enum_iostream.hpp>
 #  include <magic_enum/magic_enum_utility.hpp>
@@ -57,6 +58,7 @@ extern "C++" {
 #  include <magic_enum/magic_enum.hpp>
 #  include <magic_enum/magic_enum_containers.hpp>
 #  include <magic_enum/magic_enum_flags.hpp>
+#  include <magic_enum/magic_enum_flags_codec.hpp>
 #  include <magic_enum/magic_enum_format.hpp>
 #  include <magic_enum/magic_enum_fuse.hpp>
 #  include <magic_enum/magic_enum_iostream.hpp>
