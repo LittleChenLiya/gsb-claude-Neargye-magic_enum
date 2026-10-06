@@ -15,6 +15,7 @@ Header-only C++17 library provides static reflection for enums, work with any en
 
 * [Reference](doc/reference.md)
 * [Limitations](doc/limitations.md)
+* [External name tables](doc/external_names.md)
 * [Integration](#integration)
 
 ## [Features & Examples](example/)

@@ -34,6 +34,7 @@
 
 #include "magic_enum.hpp"
 #include "magic_enum_containers.hpp"
+#include "magic_enum_extname.hpp"
 #include "magic_enum_flags.hpp"
 #include "magic_enum_format.hpp"
 #include "magic_enum_fuse.hpp"

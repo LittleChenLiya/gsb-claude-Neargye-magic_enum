@@ -217,6 +217,36 @@ function(magic_enum_make_configuration_compile_fail_test case_name case_id expec
   set_tests_properties(${target} PROPERTIES RUN_SERIAL TRUE)
 endfunction()
 
+function(magic_enum_make_extname_compile_fail_test case_name case_id expected_text)
+  set(target test_extname-compile-fail-${case_name}-cpp17)
+  add_executable(${target} EXCLUDE_FROM_ALL test_extname_compile_fail.cpp)
+  target_compile_options(${target} PRIVATE ${MAGIC_ENUM_TEST_COMPILE_OPTIONS})
+  target_compile_definitions(${target} PRIVATE MAGIC_ENUM_EXTNAME_COMPILE_FAIL_CASE=${case_id})
+  if(MAGIC_ENUM_OPT_TEST_INSTALLED_VERSION_PKGCONFIG)
+    target_link_libraries(${target} PRIVATE PkgConfig::magic_enum)
+  else()
+    target_link_libraries(${target} PRIVATE magic_enum::magic_enum)
+  endif()
+  set_target_properties(
+    ${target}
+    PROPERTIES
+      CXX_EXTENSIONS OFF
+      CXX_STANDARD 17
+      CXX_STANDARD_REQUIRED ON
+  )
+
+  add_test(
+    NAME ${target}
+    COMMAND ${CMAKE_COMMAND}
+      "-DBUILD_DIR=${CMAKE_BINARY_DIR}"
+      "-DTARGET_NAME=${target}"
+      "-DCONFIG=$<CONFIG>"
+      "-DEXPECTED_TEXT=${expected_text}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/check_compile_fail.cmake"
+  )
+  set_tests_properties(${target} PROPERTIES RUN_SERIAL TRUE)
+endfunction()
+
 function(magic_enum_make_module_test src target module_target)
   add_executable(${target} ${src})
   target_compile_options(${target} PRIVATE ${MAGIC_ENUM_TEST_COMPILE_OPTIONS})
@@ -243,7 +273,7 @@ function(magic_enum_make_module_test src target module_target)
   add_test(NAME ${target} COMMAND ${target})
 endfunction()
 
-set(MAGIC_ENUM_TEST_SOURCES test test_flags test_aliases test_containers test_wchar_t)
+set(MAGIC_ENUM_TEST_SOURCES test test_flags test_aliases test_containers test_wchar_t test_extname)
 
 function(magic_enum_add_tests suffix standard_flag)
   foreach(test_name IN LISTS MAGIC_ENUM_TEST_SOURCES)
@@ -297,6 +327,21 @@ magic_enum_make_configuration_compile_fail_test(
   invalid-is-flags
   2
   "magic_enum::customize::enum_range requires is_flags to have bool type"
+)
+magic_enum_make_extname_compile_fail_test(
+  conflicting-canonical-names
+  1
+  "magic_enum::extname: canonical name maps to different enum values"
+)
+magic_enum_make_extname_compile_fail_test(
+  invalid-case-policy
+  2
+  "magic_enum::extname: invalid case policy"
+)
+magic_enum_make_extname_compile_fail_test(
+  empty-external-name
+  3
+  "magic_enum::extname: external name must not be empty"
 )
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
