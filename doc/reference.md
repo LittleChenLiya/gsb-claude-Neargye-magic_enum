@@ -1273,3 +1273,59 @@ class set {
   auto it = color_set.find(std::string_view{"GREEN"});
   auto range = color_set.equal_range(std::string_view{"GREEN"});
   ```
+
+## Explicit external name table (`magic_enum_explicit_names.hpp`)
+
+A separate, header-only facility builds a compile-time lookup table of external
+names for an enum. Defining such a table never changes the ordinary magic_enum
+mapping (`enum_cast` / `enum_name`).
+
+```cpp
+#include <magic_enum/magic_enum_explicit_names.hpp>
+namespace en = magic_enum::explicit_names;
+
+enum class Color { RED = 1, GREEN = 2, BLUE = 3 };
+
+MAGIC_ENUM_EXPLICIT_NAME_TABLE(Color, color_names, case_sensitive,
+    {{"RED", Color::RED}, {"GREEN", Color::GREEN}, {"BLUE", Color::BLUE}});
+
+auto r = en::parse(color_names, "GREEN"); // r.value == Color::GREEN, r.status == parse_status::ok
+```
+
+* `case_policy`
+
+  * `case_sensitive` compares names byte for byte.
+  * `case_insensitive_ascii` folds only `A-Z` onto `a-z`; every other byte,
+    including the bytes of UTF-8 non-ASCII letters, is compared unchanged.
+  * `unicode_case_insensitive` is reserved and rejected: this facility performs
+    only ASCII folding and does not claim full Unicode case folding
+    (`unicode_support_scope == unicode_support::ascii_fold_only`,
+    `full_unicode_case_folding_supported == false`).
+
+* Constexpr precheck (compile-time rejection)
+
+  * Two entries that share a canonical name must refer to the same enum value;
+    otherwise the program is ill-formed ("the same canonical name must not
+    point to different enum values"). For example external `A` and `a` collide
+    under `case_insensitive_ascii`, so they cannot name different enum values.
+  * Empty names are rejected, and an unsupported policy is rejected.
+  * `detail::validate<Policy>(entries)` returns a `table_check { bool valid;
+    const char* message; }` for use in your own `static_assert`.
+
+* Merging and sources
+
+  Entries that fold to the same canonical name and agree on the value merge
+  into one row; all original spellings stay available through `sources_of` /
+  `sources_of_value`, so aliases sharing one value combine their sources.
+
+* Lookup
+
+  The rows are generated and sorted at compile time and `parse` is a binary
+  search; entries are not linearly rescanned. Unknown input returns
+  `parse_status::unknown_name` with no value (it never falls back to the
+  zero-valued enumerator), while a policy that does not match the table returns
+  `parse_status::invalid_policy`. Use the template `parse<Requested>(table,
+  name)` for a compile-time policy or `parse_with_policy(table, name, policy)`
+  for a runtime policy.
+
+See [example_explicit_names.cpp](../example/example_explicit_names.cpp).

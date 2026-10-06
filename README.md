@@ -61,6 +61,25 @@ Header-only C++17 library provides static reflection for enums, work with any en
   auto color_or_default = magic_enum::enum_cast<Color>(color_name).value_or(Color::RED);
   ```
 
+* Explicit external name table (separate from the built-in mapping)
+
+  ```cpp
+  #include <magic_enum/magic_enum_explicit_names.hpp>
+  namespace en = magic_enum::explicit_names;
+
+  // Constexpr-validated table; the same canonical name cannot point to
+  // different enum values. Lookup is a compile-time sorted binary search;
+  // unknown input and an illegal case policy are reported separately and an
+  // unknown name never falls back to the zero value. Only ASCII case folding is
+  // performed (full Unicode case folding is not claimed).
+  MAGIC_ENUM_EXPLICIT_NAME_TABLE(Color, color_names, case_insensitive_ascii,
+      {{"RED", Color::RED}, {"red", Color::RED}, {"GREEN", Color::GREEN}});
+  auto r = en::parse(color_names, "BLUE");            // unknown_name
+  auto g = en::parse(color_names, "green");           // ok -> Color::GREEN
+  ```
+
+  See [example](example/example_explicit_names.cpp) and the [reference](doc/reference.md#explicit-external-name-table-magic_enum_explicit_nameshpp).
+
 * Integer to enum value
 
   ```cpp

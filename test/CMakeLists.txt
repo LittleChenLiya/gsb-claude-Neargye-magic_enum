@@ -217,6 +217,32 @@ function(magic_enum_make_configuration_compile_fail_test case_name case_id expec
   set_tests_properties(${target} PROPERTIES RUN_SERIAL TRUE)
 endfunction()
 
+function(magic_enum_make_explicit_names_compile_fail_test case_name case_id expected_text)
+  set(target test_explicit-names-compile-fail-${case_name}-cpp17)
+  add_executable(${target} EXCLUDE_FROM_ALL test_explicit_names_compile_fail.cpp)
+  target_compile_options(${target} PRIVATE ${MAGIC_ENUM_TEST_COMPILE_OPTIONS})
+  target_compile_definitions(${target} PRIVATE MAGIC_ENUM_EXPLICIT_NAMES_COMPILE_FAIL_CASE=${case_id})
+  target_link_libraries(${target} PRIVATE magic_enum::magic_enum)
+  set_target_properties(
+    ${target}
+    PROPERTIES
+      CXX_EXTENSIONS OFF
+      CXX_STANDARD 17
+      CXX_STANDARD_REQUIRED ON
+  )
+
+  add_test(
+    NAME ${target}
+    COMMAND ${CMAKE_COMMAND}
+      "-DBUILD_DIR=${CMAKE_BINARY_DIR}"
+      "-DTARGET_NAME=${target}"
+      "-DCONFIG=$<CONFIG>"
+      "-DEXPECTED_TEXT=${expected_text}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/check_compile_fail.cmake"
+  )
+  set_tests_properties(${target} PROPERTIES RUN_SERIAL TRUE)
+endfunction()
+
 function(magic_enum_make_module_test src target module_target)
   add_executable(${target} ${src})
   target_compile_options(${target} PRIVATE ${MAGIC_ENUM_TEST_COMPILE_OPTIONS})
@@ -297,6 +323,40 @@ magic_enum_make_configuration_compile_fail_test(
   invalid-is-flags
   2
   "magic_enum::customize::enum_range requires is_flags to have bool type"
+)
+
+# Explicit external name table: standalone, deterministic C++17 tests.
+add_executable(test_explicit_names-cpp17 test_explicit_names.cpp)
+target_compile_options(test_explicit_names-cpp17 PRIVATE ${MAGIC_ENUM_TEST_COMPILE_OPTIONS})
+target_link_libraries(test_explicit_names-cpp17 PRIVATE magic_enum::magic_enum)
+set_target_properties(
+  test_explicit_names-cpp17
+  PROPERTIES
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+)
+add_test(NAME test_explicit_names-cpp17 COMMAND test_explicit_names-cpp17)
+
+magic_enum_make_explicit_names_compile_fail_test(
+  ascii-case-collision
+  1
+  "the same canonical name must not point to different enum values"
+)
+magic_enum_make_explicit_names_compile_fail_test(
+  unsupported-unicode
+  2
+  "unsupported case_policy"
+)
+magic_enum_make_explicit_names_compile_fail_test(
+  duplicate-different-value
+  3
+  "the same canonical name must not point to different enum values"
+)
+magic_enum_make_explicit_names_compile_fail_test(
+  empty-name
+  4
+  "empty external name is not allowed"
 )
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")

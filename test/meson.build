@@ -20,3 +20,13 @@ foreach test_name, test_src : test_files
 
     test(test_name, test_exe)
 endforeach
+
+# Explicit external name table: self-contained, no doctest dependency.
+explicit_names_test_exe = executable(
+    'explicit_names_test',
+    files('test_explicit_names.cpp'),
+    build_by_default: false,
+    dependencies: [magic_enum_dep],
+    cpp_args: ['-Werror'],
+)
+test('explicit names test', explicit_names_test_exe)
