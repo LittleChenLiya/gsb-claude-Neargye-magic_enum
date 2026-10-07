@@ -135,6 +135,61 @@ constexpr decltype(auto) linear_switch(F&& f, E value, Def&& def) {
 }
 #endif
 
+template <typename E, enum_subtype S, auto V>
+constexpr bool subset_member_reflected() noexcept {
+  for (const auto e : values_v<E, S>) {
+    if (enum_value_equal(e, static_cast<E>(V))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+template <typename U, U... Vs>
+inline constexpr bool subset_unique_v = []() constexpr {
+  constexpr std::size_t n = sizeof...(Vs);
+  const U values[n != 0 ? n : 1] = {Vs...};
+  for (std::size_t i = 0; i < n; ++i) {
+    for (std::size_t j = i + 1; j < n; ++j) {
+      if (values[i] == values[j]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+();
+
+template <typename F, auto... Vs>
+using subset_common_result_t = std::decay_t<typename std::common_type<invoke_result_t<F, enum_constant<Vs>>...>::type>;
+
+template <typename R, typename E, typename F, auto V, auto... Vs>
+constexpr decltype(auto) subset_switch_impl(F&& f, E value) {
+  using C = enum_constant<V>;
+  if (enum_value_equal(value, static_cast<E>(V))) {
+    if constexpr (std::is_void_v<R>) {
+      if constexpr (std::is_invocable_v<F, C>) {
+        invoke_constant(std::forward<F>(f), C{});
+      }
+      return true;
+    } else {
+      if constexpr (std::is_invocable_r_v<R, F, C>) {
+        return optional<R>{static_cast<R>(invoke_constant(std::forward<F>(f), C{}))};
+      } else {
+        return optional<R>{};
+      }
+    }
+  } else if constexpr (sizeof...(Vs) != 0) {
+    return subset_switch_impl<R, E, F, Vs...>(std::forward<F>(f), value);
+  } else {
+    if constexpr (std::is_void_v<R>) {
+      return false;
+    } else {
+      return optional<R>{};
+    }
+  }
+}
+
 } // namespace magic_enum::detail
 
 template <typename Result = detail::default_result_type, typename E, detail::enum_subtype S = detail::subtype_v<E>, typename F, typename R = detail::result_t<E, S, Result, F>>
@@ -185,6 +240,24 @@ constexpr decltype(auto) enum_switch(F&& f, E value, Result&& result) {
 template <typename Result, detail::enum_subtype S, typename E, typename F, typename R = detail::result_with_fallback_t<E, S, Result, F>>
 constexpr decltype(auto) enum_switch(F&& f, E value, Result&& result) {
   return enum_switch<Result, E, S>(std::forward<F>(f), value, std::forward<Result>(result));
+}
+
+template <auto... Vs, typename E, typename F, typename D = std::decay_t<E>, detail::enum_subtype S = detail::subtype_v<D>>
+constexpr decltype(auto) enum_switch_subset(F&& f, E value) {
+  static_assert(std::is_enum_v<D>, "magic_enum::enum_switch_subset requires enum type.");
+  static_assert(sizeof...(Vs) > 0, "magic_enum::enum_switch_subset requires at least one subset member.");
+  static_assert((std::is_same_v<decltype(Vs), D> && ...), "magic_enum::enum_switch_subset requires subset members of the dispatched enum type.");
+  static_assert(detail::is_reflected_v<D, S>, "magic_enum requires enum implementation and valid max and min.");
+  static_assert((detail::subset_member_reflected<D, S, Vs>() && ...), "magic_enum::enum_switch_subset requires subset members within the reflected enum range.");
+  static_assert(detail::subset_unique_v<std::underlying_type_t<D>, static_cast<std::underlying_type_t<D>>(Vs)...>, "magic_enum::enum_switch_subset requires distinct subset members.");
+
+  if constexpr (sizeof...(Vs) == 0) {
+    return false;
+  } else {
+    using R0 = detail::subset_common_result_t<F, Vs...>;
+    using R = std::conditional_t<std::is_same_v<R0, detail::nonesuch>, void, R0>;
+    return detail::subset_switch_impl<R, D, F, Vs...>(std::forward<F>(f), value);
+  }
 }
 
 } // namespace magic_enum
