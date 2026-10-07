@@ -67,5 +67,19 @@ int main() {
   std::cout << magic_enum::containers::get<Color::GREEN>(color_rgb_make) << std::endl; // R=0 G=255 B=0
   std::cout << magic_enum::containers::get<Color::BLUE>(color_rgb_make) << std::endl;  // R=0 G=0 B=255
 
+  // Short regression: the make_array_with factory builds per reflected member and
+  // matches the existing make_array interface element for element.
+  const auto color_rgb_factory = magic_enum::containers::make_array_with<Color, RGB>([](Color color) {
+    switch (color) {
+      case Color::RED: return RGB{color_max, 0, 0};
+      case Color::GREEN: return RGB{0, color_max, 0};
+      default: return RGB{0, 0, color_max};
+    }
+  });
+  std::cout << std::boolalpha << (color_rgb_factory == color_rgb_make) << std::endl;   // true
+  std::cout << magic_enum::containers::get<Color::RED>(color_rgb_factory) << std::endl;   // R=255 G=0 B=0
+  std::cout << magic_enum::containers::get<Color::GREEN>(color_rgb_factory) << std::endl; // R=0 G=255 B=0
+  std::cout << magic_enum::containers::get<Color::BLUE>(color_rgb_factory) << std::endl;  // R=0 G=0 B=255
+
   return 0;
 }

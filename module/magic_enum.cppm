@@ -134,6 +134,7 @@ namespace containers {
   using containers::default_indexing;
   using containers::get;
   using containers::make_array;
+  using containers::make_array_with;
   using containers::name_greater;
   using containers::name_greater_case_insensitive;
   using containers::name_less;

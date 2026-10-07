@@ -23,9 +23,11 @@
 #include <limits>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <type_traits>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 enum class Color { RED = 1, GREEN = 2, BLUE = 4 };
 template <>
@@ -60,6 +62,35 @@ enum class Bits65 {
 
 static_assert(magic_enum::enum_count<Bits32>() == 32);
 static_assert(magic_enum::enum_count<Bits65>() == 65);
+
+// Small enum with negative and sparse underlying values, used by the
+// make_array_with factory tests.
+enum class Level { Low = -7, Mid = 0, High = 42 };
+static_assert(magic_enum::enum_count<Level>() == 3);
+
+// Move-only, non-default-constructible element that counts its live instances,
+// used to verify the exception-safe construction of make_array_with.
+struct CountingResource {
+  static inline int constructed = 0;
+  static inline int destructed = 0;
+  static inline int moved = 0;
+
+  int id;
+
+  explicit CountingResource(int value) noexcept : id{value} { ++constructed; }
+  CountingResource(const CountingResource&) = delete;
+  CountingResource& operator=(const CountingResource&) = delete;
+  CountingResource(CountingResource&& other) noexcept : id{other.id} { other.id = -1; ++moved; }
+  CountingResource& operator=(CountingResource&&) = delete;
+  ~CountingResource() { ++destructed; }
+
+  static void reset() noexcept { constructed = destructed = moved = 0; }
+  static int live() noexcept { return constructed - destructed; }
+};
+
+static_assert(!std::is_default_constructible_v<CountingResource>);
+static_assert(!std::is_copy_constructible_v<CountingResource>);
+static_assert(std::is_move_constructible_v<CountingResource>);
 
 struct StaticIndex : magic_enum::containers::default_indexing<Color> {
   StaticIndex() = delete;
@@ -372,6 +403,79 @@ TEST_CASE("containers_array") {
 
   const magic_enum::containers::array<Color, int, OutOfRangeIndex> custom_index_array{};
   REQUIRE_THROWS(custom_index_array.at(static_cast<Color>(8)));
+}
+
+TEST_CASE("containers_array make_array_with") {
+  using magic_enum::containers::make_array_with;
+
+  SUBCASE("factory is fed real reflected members and result keeps enum-keyed access") {
+    CountingResource::reset();
+    std::vector<Level> seen;
+    {
+      auto levels = make_array_with<Level, CountingResource>([&seen](Level level) {
+        seen.push_back(level);
+        return CountingResource{static_cast<int>(level)};
+      });
+      static_assert(std::is_same_v<decltype(levels), magic_enum::containers::array<Level, CountingResource>>);
+      // The generator observed the reflected members, not integers 0, 1, 2 cast to Level.
+      REQUIRE(seen == std::vector<Level>{Level::Low, Level::Mid, Level::High});
+      // Guaranteed copy elision: each element was direct-initialized from the prvalue.
+      REQUIRE(CountingResource::moved == 0);
+      REQUIRE(CountingResource::live() == 3);
+      // Existing enum-keyed access interface still applies, bound to the right members.
+      REQUIRE(levels.at(Level::Low).id == -7);
+      REQUIRE(levels.at(Level::Mid).id == 0);
+      REQUIRE(levels.at(Level::High).id == 42);
+      REQUIRE(levels[Level::Low].id == -7);
+      REQUIRE(levels[Level::High].id == 42);
+      REQUIRE_THROWS_AS(levels.at(static_cast<Level>(1)), std::out_of_range);
+    }
+    // All elements were destroyed exactly once when the array went out of scope.
+    REQUIRE(CountingResource::live() == 0);
+    REQUIRE(CountingResource::destructed == CountingResource::constructed);
+  }
+
+  SUBCASE("throwing generator destroys only the completed elements") {
+    CountingResource::reset();
+    const auto throwing_generator = [](Level level) -> CountingResource {
+      if (level == Level::High) {
+        throw std::runtime_error{"factory failed on the last reflected member"};
+      }
+      return CountingResource{static_cast<int>(level)};
+    };
+    REQUIRE_THROWS_AS((make_array_with<Level, CountingResource>(throwing_generator)), std::runtime_error);
+    // Low and Mid completed before High threw: exactly those two were destroyed, no leak.
+    REQUIRE(CountingResource::constructed == 2);
+    REQUIRE(CountingResource::destructed == 2);
+    REQUIRE(CountingResource::live() == 0);
+  }
+
+  SUBCASE("custom indexing binds members to Index slots, not reflection order") {
+    using SortedIndex = magic_enum::containers::comparator_indexing<std::less<>>;
+    std::vector<ReverseOrder> seen;
+    const auto values = make_array_with<ReverseOrder, int, SortedIndex>([&seen](ReverseOrder member) {
+      seen.push_back(member);
+      return static_cast<int>(member) + 1;
+    });
+    // ReverseOrder compares in reverse, so slot order is Third, Second, First.
+    REQUIRE(seen == std::vector<ReverseOrder>{ReverseOrder::Third, ReverseOrder::Second, ReverseOrder::First});
+    REQUIRE(values.at(ReverseOrder::First) == 1);
+    REQUIRE(values.at(ReverseOrder::Second) == 2);
+    REQUIRE(values.at(ReverseOrder::Third) == 3);
+    REQUIRE(values.a[0] == 3); // slot 0 holds Third under the custom indexing
+  }
+
+  SUBCASE("short regression against the existing make_array interface") {
+    constexpr auto legacy = magic_enum::containers::make_array<Level>(-7, 0, 42);
+    constexpr auto generated = make_array_with<Level, int>([](Level level) { return static_cast<int>(level); });
+    static_assert(generated.at(Level::Low) == -7);
+    static_assert(generated.at(Level::Mid) == 0);
+    static_assert(generated.at(Level::High) == 42);
+    REQUIRE(generated == legacy);
+    REQUIRE(generated.at(Level::Low) == legacy.at(Level::Low));
+    REQUIRE(generated.at(Level::Mid) == legacy.at(Level::Mid));
+    REQUIRE(generated.at(Level::High) == legacy.at(Level::High));
+  }
 }
 
 TEST_CASE("containers_bitset") {

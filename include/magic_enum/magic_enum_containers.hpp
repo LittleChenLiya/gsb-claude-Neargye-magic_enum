@@ -613,6 +613,41 @@ constexpr std::enable_if_t<(enum_count<E>() == sizeof...(Ts)), array<E, std::rem
   return {{std::forward<Ts>(ts)...}};
 }
 
+namespace detail {
+
+// Reflected enum members ordered by their storage slot under Index.
+template <typename E, typename Index>
+constexpr std::array<E, enum_count<E>()> members_by_slot() noexcept {
+  std::array<E, enum_count<E>()> members{};
+  for (const auto value : enum_values<E>()) {
+    members[*Index::at(value)] = value;
+  }
+  return members;
+}
+
+template <typename E, typename V, typename Index, typename F, std::size_t... I>
+constexpr array<E, V, Index> make_array_with_impl(F&& generator, std::index_sequence<I...>) {
+  constexpr auto members = members_by_slot<E, Index>();
+  // Aggregate initialization runs the generator calls in storage-slot order and
+  // direct-initializes each element from the returned prvalue. If a call throws,
+  // only the already-completed elements are destroyed, in reverse completion order.
+  return {{generator(members[I])...}};
+}
+
+} // namespace detail
+
+// Factory entry building an array<E, V, Index> per reflected enum member.
+// The generator is invoked once with each real reflected member of E (never with
+// integers cast from the sparse underlying range), and its result is placed in the
+// slot Index::at(member). V may be non-default-constructible and move-only.
+// If the generator throws midway, only the elements completed so far are destroyed.
+template <typename E, typename V, typename Index = default_indexing<E>, typename F>
+constexpr array<E, V, Index> make_array_with(F&& generator) {
+  static_assert(std::is_enum_v<E>, "magic_enum::containers::make_array_with requires enum type.");
+  static_assert(std::is_invocable_r_v<V, F&, E>, "magic_enum::containers::make_array_with requires generator invocable with an enum member and returning the mapped type.");
+  return detail::make_array_with_impl<E, V, Index>(static_cast<F&&>(generator), std::make_index_sequence<enum_count<E>()>{});
+}
+
 inline constexpr detail::raw_access_t raw_access{};
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
