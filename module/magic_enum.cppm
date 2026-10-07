@@ -162,6 +162,7 @@ using magic_enum::enum_names;
 using magic_enum::enum_entries;
 using magic_enum::enum_fuse;
 using magic_enum::enum_switch;
+using magic_enum::enum_switch_subset;
 using magic_enum::enum_for_each;
 using magic_enum::enum_contains;
 using magic_enum::enum_index;

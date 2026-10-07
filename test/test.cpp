@@ -1555,6 +1555,73 @@ TEST_CASE("enum_switch") {
   }
 }
 
+TEST_CASE("enum_switch_subset") {
+  SUBCASE("hit once and zero calls for unselected values") {
+    int calls = 0;
+    const auto switcher = overloaded{
+      [&calls](enum_constant<Color::RED>) { ++calls; return 1; },
+      [&calls](enum_constant<Color::BLUE>) { ++calls; return 2; }
+    };
+
+    REQUIRE(enum_switch_subset<Color::RED, Color::BLUE>(switcher, Color::RED) == 1);
+    REQUIRE(calls == 1);
+    REQUIRE(enum_switch_subset<Color::RED, Color::BLUE>(switcher, Color::BLUE) == 2);
+    REQUIRE(calls == 2);
+    // Reflected enumerator outside the subset is not dispatched.
+    REQUIRE(enum_switch_subset<Color::RED, Color::BLUE>(switcher, Color::GREEN) == 0);
+    // Invalid value is not dispatched.
+    REQUIRE(enum_switch_subset<Color::RED, Color::BLUE>(switcher, static_cast<Color>(0)) == 0);
+    REQUIRE(calls == 2);
+  }
+
+  SUBCASE("fallback result for values outside the subset") {
+    int calls = 0;
+    const int fallback = -1;
+    const auto switcher = overloaded{
+      [&calls](enum_constant<Color::GREEN>) { ++calls; return 7; },
+      [&calls](enum_constant<Color::BLUE>) { ++calls; return 15; }
+    };
+
+    static_assert(std::is_same_v<decltype(enum_switch_subset<Color::GREEN, Color::BLUE>(switcher, Color::GREEN, fallback)), int>);
+    REQUIRE(enum_switch_subset<Color::GREEN, Color::BLUE>(switcher, Color::GREEN, fallback) == 7);
+    REQUIRE(calls == 1);
+    REQUIRE(enum_switch_subset<Color::GREEN, Color::BLUE>(switcher, Color::BLUE, fallback) == 15);
+    REQUIRE(calls == 2);
+    REQUIRE(enum_switch_subset<Color::GREEN, Color::BLUE>(switcher, Color::RED, fallback) == -1);
+    REQUIRE(enum_switch_subset<Color::GREEN, Color::BLUE>(switcher, static_cast<Color>(0), fallback) == -1);
+    REQUIRE(calls == 2);
+  }
+
+  SUBCASE("integer underlying values preserved") {
+    constexpr auto to_integer = [](auto constant) { return enum_integer(constant()); };
+    static_assert(enum_switch_subset<Color::RED, Color::GREEN>(to_integer, Color::RED) == -12);
+    static_assert(enum_switch_subset<Color::RED, Color::GREEN>(to_integer, Color::GREEN) == 7);
+    static_assert(enum_switch_subset<Color::RED, Color::GREEN>(to_integer, static_cast<Color>(7)) == 7);
+    static_assert(enum_switch_subset<Color::RED, Color::GREEN>(to_integer, Color::BLUE) == 0);
+    static_assert(enum_switch_subset<Color::RED, Color::GREEN>(to_integer, Color::GREEN, -1) == 7);
+    static_assert(enum_switch_subset<Color::RED, Color::GREEN>(to_integer, Color::BLUE, -1) == -1);
+    static_assert(enum_switch_subset<Color::RED, Color::GREEN>(to_integer, static_cast<Color>(0), -1) == -1);
+  }
+
+  SUBCASE("callback instantiated only for subset branches") {
+    // The body of this generic callback only compiles for subset members;
+    // plain enum_switch over the full reflected range would not compile with it.
+    const auto guarded = [](auto constant) {
+      static_assert(decltype(constant)::value == Color::RED || decltype(constant)::value == Color::BLUE, "callback instantiated for a non-subset branch");
+      return enum_integer(decltype(constant)::value);
+    };
+    REQUIRE(enum_switch_subset<Color::RED, Color::BLUE>(guarded, Color::RED) == -12);
+    REQUIRE(enum_switch_subset<Color::RED, Color::BLUE>(guarded, Color::BLUE) == 15);
+    REQUIRE(enum_switch_subset<Color::RED, Color::BLUE>(guarded, Color::GREEN) == 0);
+  }
+
+  SUBCASE("constexpr subset dispatch") {
+    constexpr auto integer = [](auto constant) { return enum_integer(constant()); };
+    static_assert(enum_switch_subset<Color::GREEN, Color::BLUE>(integer, Color::BLUE) == 15);
+    static_assert(enum_switch_subset<Color::GREEN, Color::BLUE>(integer, Color::RED, -1) == -1);
+  }
+}
+
 TEST_CASE("enum_type_name") {
   REQUIRE(enum_type_name<Color&>() == "Color");
   REQUIRE(enum_type_name<const Numbers>() == "Numbers");

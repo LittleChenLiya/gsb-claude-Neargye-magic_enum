@@ -16,6 +16,7 @@
 * [`enum_type_name` returns enum type name.](#enum_type_name)
 * [`enum_fuse` combines enum values for switch/case statements.](#enum_fuse)
 * [`enum_switch` transforms runtime enum value into constexpr constant.](#enum_switch)
+* [`enum_switch_subset` dispatches on an explicit subset of enum values.](#enum_switch_subset)
 * [`enum_for_each` calls function for each enum value as constexpr constant.](#enum_for_each)
 * [`enum_next_value` and `enum_prev_value` move through enum values.](#enum_next_value-and-enum_prev_value)
 * [`enum_flags_*` functions operate on flags.](#enum_flags)
@@ -529,6 +530,37 @@ constexpr decltype(auto) enum_switch(Lambda&& lambda, E value, Result&& result);
   magic_enum::enum_switch([](auto val) {
     constexpr Color c_color = val;
     // ...
+  }, color);
+  ```
+
+## `enum_switch_subset`
+
+```cpp
+template <auto... Vs, typename E, typename Lambda>
+constexpr decltype(auto) enum_switch_subset(Lambda&& lambda, E value);
+
+template <auto... Vs, typename Result, typename E, typename Lambda>
+constexpr decltype(auto) enum_switch_subset(Lambda&& lambda, E value, Result&& result);
+```
+
+* Defined in header `<magic_enum/magic_enum_switch.hpp>`
+
+* Calls callable with `enum_constant<V>` only for the enumerators explicitly listed in `Vs...`.
+
+* Subset values must be distinct reflected enumerators of the same enum type, otherwise compilation fails with a diagnostic.
+
+* The callable is instantiated only for the listed subset branches.
+
+* If the runtime value is not in the subset, returns default-constructed result or supplied `result`, without calling the callable.
+
+* Examples
+
+  ```cpp
+  Color color = Color::RED;
+
+  magic_enum::enum_switch_subset<Color::RED, Color::BLUE>([](auto val) {
+    constexpr Color c_color = val;
+    // Instantiates only for Color::RED and Color::BLUE.
   }, color);
   ```
 
