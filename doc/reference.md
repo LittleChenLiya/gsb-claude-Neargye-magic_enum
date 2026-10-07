@@ -955,10 +955,18 @@ struct array {
 
 * `to_array<E>(array)` converts built-in array whose size equals `enum_count<E>()`.
 
+* `build_array<E, Index = default_indexing<E>>(factory)` invokes `factory(member)` once per reflected member, in `Index` storage order, and returns an `array` built from the results. Iteration follows the real reflected members rather than the (possibly negative or sparse) underlying enum integers. The element type is deduced from the factory result and only needs to be move-constructible (not default- or copy-constructible). If the factory or an element constructor throws, exactly the already-constructed elements are destroyed and no array object is produced; on success the result uses the ordinary enum-based `operator[]` / `at` / `get` access.
+
 * Examples
 
   ```cpp
   constexpr auto color_rgb_array = magic_enum::containers::make_array<Color>(RGB{255, 0, 0}, RGB{0, 255, 0}, RGB{0, 0, 255});
+  ```
+
+  ```cpp
+  // Per reflected member, also works for negative / sparse values and
+  // move-only, non-default-constructible elements.
+  auto color_names = magic_enum::containers::build_array<Color>([](Color c) { return std::string{magic_enum::enum_name(c)}; });
   ```
 
   ```cpp

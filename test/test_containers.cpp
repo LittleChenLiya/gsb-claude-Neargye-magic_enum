@@ -18,11 +18,14 @@
 
 #include <magic_enum/magic_enum_iostream.hpp>
 
+#include <array>
 #include <functional>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <type_traits>
 #include <unordered_set>
 #include <utility>
@@ -372,6 +375,134 @@ TEST_CASE("containers_array") {
 
   const magic_enum::containers::array<Color, int, OutOfRangeIndex> custom_index_array{};
   REQUIRE_THROWS(custom_index_array.at(static_cast<Color>(8)));
+}
+
+namespace build_array_fixture {
+
+// Small enum with both negative and sparse underlying values: -2, 3, 10.
+enum class SparseColor : int { LOW = -2, MID = 3, HIGH = 10 };
+
+struct ItemCounters {
+  static int alive;
+  static int constructed;
+  static int destructed;
+  static void reset() noexcept {
+    alive = 0;
+    constructed = 0;
+    destructed = 0;
+  }
+};
+int ItemCounters::alive = 0;
+int ItemCounters::constructed = 0;
+int ItemCounters::destructed = 0;
+
+// Counting element: neither default nor copy constructible, only movable.
+struct CountedItem : ItemCounters {
+  int value = 0;
+
+  explicit CountedItem(int v) : value(v) {
+    ++alive;
+    ++constructed;
+  }
+  CountedItem(const CountedItem&) = delete;
+  CountedItem& operator=(const CountedItem&) = delete;
+  CountedItem(CountedItem&& other) noexcept : value(other.value) {
+    ++alive;
+    ++constructed;
+  }
+  CountedItem& operator=(CountedItem&&) = delete;
+  ~CountedItem() {
+    --alive;
+    ++destructed;
+  }
+
+  [[nodiscard]] bool operator==(const CountedItem& other) const noexcept { return value == other.value; }
+};
+
+struct BuildBoom : std::runtime_error {
+  BuildBoom() : std::runtime_error("build_array factory failure") {}
+};
+
+} // namespace build_array_fixture
+
+TEST_CASE("containers_array build factory is exception-safe along reflected members") {
+  using namespace build_array_fixture;
+
+  SUBCASE("indices follow reflected members, not sparse/negative integers") {
+    std::array<SparseColor, magic_enum::enum_count<SparseColor>()> seen{};
+    std::size_t slot = 0;
+    auto built = magic_enum::containers::build_array<SparseColor>([&](SparseColor member) {
+      seen[slot++] = member;
+      return static_cast<int>(magic_enum::enum_underlying(member)) * 2;
+    });
+    constexpr auto values = magic_enum::enum_values<SparseColor>();
+    REQUIRE(seen[0] == values[0]);
+    REQUIRE(seen[1] == values[1]);
+    REQUIRE(seen[2] == values[2]);
+
+    // Success keeps using the existing enum-based access interface.
+    REQUIRE(built[SparseColor::LOW] == -4);
+    REQUIRE(built[SparseColor::MID] == 6);
+    REQUIRE(built[SparseColor::HIGH] == 20);
+    REQUIRE(built.at(SparseColor::LOW) == -4);
+    REQUIRE(magic_enum::containers::get<SparseColor::HIGH>(built) == 20);
+  }
+
+  SUBCASE("failure in the middle destructs only already completed elements") {
+    ItemCounters::reset();
+
+    // First reflected member produces an element; the second one throws out of
+    // the factory. No element is built for the third member.
+    auto factory = [](SparseColor member) -> CountedItem {
+      switch (member) {
+        case SparseColor::LOW:
+          return CountedItem{-7};
+        case SparseColor::MID:
+          throw BuildBoom{};
+        case SparseColor::HIGH:
+          return CountedItem{99};
+      }
+      return CountedItem{0};
+    };
+
+    REQUIRE_THROWS_AS(magic_enum::containers::build_array<SparseColor>(factory), BuildBoom);
+    // Exactly the single completed element was constructed and then destroyed;
+    // the throwing slot and the remaining slot never produced an element.
+    CHECK(ItemCounters::alive == 0);
+    CHECK(ItemCounters::constructed == 1);
+    CHECK(ItemCounters::destructed == 1);
+  }
+
+  SUBCASE("move-only, non-default-constructible elements build successfully") {
+    static_assert(!std::is_default_constructible_v<CountedItem>);
+    static_assert(!std::is_copy_constructible_v<CountedItem>);
+    static_assert(std::is_move_constructible_v<CountedItem>);
+
+    ItemCounters::reset();
+    {
+      auto built = magic_enum::containers::build_array<SparseColor>([](SparseColor member) {
+        return CountedItem{static_cast<int>(magic_enum::enum_underlying(member)) + 100};
+      });
+      REQUIRE(built[SparseColor::LOW].value == 98);
+      REQUIRE(built[SparseColor::MID].value == 103);
+      REQUIRE(built[SparseColor::HIGH].value == 110);
+      REQUIRE(ItemCounters::alive == magic_enum::enum_count<SparseColor>());
+    }
+    // Normal destruction tears down exactly the stored elements.
+    REQUIRE(ItemCounters::alive == 0);
+    REQUIRE(ItemCounters::destructed == ItemCounters::constructed);
+  }
+
+  SUBCASE("factory result matches the original make_array interface") {
+    auto built = magic_enum::containers::build_array<Color>([](Color member) {
+      return static_cast<std::uint8_t>(magic_enum::enum_underlying(member) * 10);
+    });
+    constexpr auto made = magic_enum::containers::make_array<Color>(
+        static_cast<std::uint8_t>(1U * 10),
+        static_cast<std::uint8_t>(2U * 10),
+        static_cast<std::uint8_t>(4U * 10));
+    REQUIRE(built == made);
+  }
 }
 
 TEST_CASE("containers_bitset") {

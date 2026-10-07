@@ -613,6 +613,34 @@ constexpr std::enable_if_t<(enum_count<E>() == sizeof...(Ts)), array<E, std::rem
   return {{std::forward<Ts>(ts)...}};
 }
 
+namespace detail {
+
+template <typename E, typename Index, typename F, std::size_t... I>
+constexpr array<E, std::remove_cv_t<std::invoke_result_t<F&, const E&>>, Index> build_array_impl(F& factory, std::index_sequence<I...>) {
+  // The brace-init of the aggregate expands in reflected-member order (the
+  // order Index::it defines, which is independent of the sparse underlying
+  // enum integers). Because every slot is initialized directly by the factory
+  // result, V neither has to be DefaultConstructible nor CopyConstructible; a
+  // MoveConstructible V is enough. If the factory (or an element ctor) throws
+  // for member I, the std::array aggregate is destroyed during unwinding, so
+  // exactly the already-constructed I elements run their destructors and the
+  // array object itself never comes to life.
+  return {{factory(*Index::it(I))...}};
+}
+
+} // namespace detail
+
+// Builds an array<E, V, Index> with one element per reflected enum member.
+// The factory is invoked as factory(member) in Index storage order, i.e. along
+// the real reflected members rather than the (possibly negative or sparse)
+// underlying integers. V is deduced as the factory result and only needs to be
+// move-constructible; construction is exception-safe (see build_array_impl).
+// The returned object keeps using the existing enum-based access interface.
+template <typename E, typename Index = default_indexing<E>, typename F>
+constexpr array<E, std::remove_cv_t<std::invoke_result_t<F&, const E&>>, Index> build_array(F&& factory) {
+  return detail::build_array_impl<E, Index>(factory, std::make_index_sequence<enum_count<E>()>{});
+}
+
 inline constexpr detail::raw_access_t raw_access{};
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

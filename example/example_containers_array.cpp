@@ -67,5 +67,21 @@ int main() {
   std::cout << magic_enum::containers::get<Color::GREEN>(color_rgb_make) << std::endl; // R=0 G=255 B=0
   std::cout << magic_enum::containers::get<Color::BLUE>(color_rgb_make) << std::endl;  // R=0 G=0 B=255
 
+  // Short regression: build_array feeds the factory once per reflected member;
+  // the result is still read through the existing enum access interface and
+  // must line up with make_array above.
+  const auto color_rgb_build = magic_enum::containers::build_array<Color>([](Color color) {
+    switch (color) {
+      case Color::RED:
+        return RGB{color_max, 0, 0};
+      case Color::GREEN:
+        return RGB{0, color_max, 0};
+      case Color::BLUE:
+        return RGB{0, 0, color_max};
+    }
+    return RGB{};
+  });
+  std::cout << (color_rgb_build == color_rgb_make ? "build_array matches make_array" : "build_array mismatch") << std::endl;
+
   return 0;
 }
